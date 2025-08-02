@@ -17,7 +17,14 @@ git push -u origin main
 git branch -M main
 git push -u origin main
 
+
+git add .
+git commit -m "Prepare for Streamlit deployment"
+git push origin main
+
+
 '''
+
 
 
 
@@ -27,11 +34,23 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from google.oauth2 import service_account
 
 # Google Sheets Setup via Service Account
+'''
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("tracker-app-467707-1a8bac720516.json", scope)
 gc = gspread.authorize(creds)
+'''
+
+creds = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=["https://www.googleapis.com/auth/spreadsheets"]
+)
+
+gc = gspread.authorize(creds)
+
+
 
 # Load the Google Sheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0"
