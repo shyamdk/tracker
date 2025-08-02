@@ -1,3 +1,26 @@
+
+'''
+cd path/to/tracker-clean
+git init
+
+echo -e "*.pdf\n*.csv\nhelp.md" > .gitignore
+
+git add wmanage-main.py
+git commit -m "Initial commit: Added main Python app"
+
+git remote remove origin
+git remote add origin https://github.com/shyamdk/tracker.git
+
+git push -u origin main
+
+(if error)
+git branch -M main
+git push -u origin main
+
+'''
+
+
+
 import streamlit as st
 import gspread
 import pandas as pd
