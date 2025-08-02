@@ -23,50 +23,61 @@ git commit -m "Prepare for Streamlit deployment"
 git push origin main
 
 
+
+echo "gspread_service_account.json" >> .gitignore
+
+
+git rm --cached gspread_service_account.json
+git commit -m "Remove secret"
+
+
+git push origin main
+
+
+mkdir -p .streamlit
+touch .streamlit/secrets.toml
+nano .streamlit/secrets.toml
+
+rm .streamlit/secrets.toml
 '''
-
-
 
 
 import streamlit as st
 import gspread
 import pandas as pd
 import matplotlib.pyplot as plt
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-from google.oauth2 import service_account
 
-# Google Sheets Setup via Service Account
-'''
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("tracker-app-467707-1a8bac720516.json", scope)
-gc = gspread.authorize(creds)
-'''
+# Auth: Auto-switch between local and cloud
+def authorize_gspread():
+    try:
+        from google.oauth2.service_account import Credentials
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        return gspread.authorize(creds)
+    except Exception:
+        from oauth2client.service_account import ServiceAccountCredentials
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_service_account.json", scope)
+        return gspread.authorize(creds)
 
-creds = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-)
+gc = authorize_gspread()
 
-gc = gspread.authorize(creds)
-
-
-
-# Load the Google Sheet
+# Load Google Sheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0"
 sheet = gc.open_by_url(SHEET_URL)
 worksheet = sheet.sheet1
 
-# Load data into DataFrame
+# Data functions
 def get_data():
     records = worksheet.get_all_records()
     return pd.DataFrame(records)
 
-# Add entry
 def add_entry(entry):
     worksheet.append_row(entry)
 
-# Update entry by date
 def update_entry(date, updated_entry):
     data = worksheet.get_all_values()
     for i, row in enumerate(data[1:], start=2):  # Skip header
@@ -75,10 +86,9 @@ def update_entry(date, updated_entry):
             return True
     return False
 
-# Delete entry by date
 def delete_entry(date):
     data = worksheet.get_all_values()
-    for i, row in enumerate(data[1:], start=2):  # Skip header
+    for i, row in enumerate(data[1:], start=2):
         if row[0] == date:
             worksheet.delete_rows(i)
             return True
@@ -87,7 +97,6 @@ def delete_entry(date):
 # UI
 st.set_page_config(page_title="Health Tracker", layout="wide")
 st.title("🧘 Health & Weight Tracker")
-
 menu = st.sidebar.radio("Menu", ["📈 Dashboard", "➕ Add Entry", "✏️ Update Entry", "❌ Delete Entry"])
 
 df = get_data()
@@ -96,11 +105,9 @@ if menu == "📈 Dashboard":
     st.subheader("📊 Progress Overview")
     st.dataframe(df)
 
-    # Charts
     if not df.empty:
         df["DATE"] = pd.to_datetime(df["DATE"])
         df = df.sort_values("DATE")
-
         fig, ax = plt.subplots()
         ax.plot(df["DATE"], df["TARGET_WEIGHT"], label="Target Weight", linestyle="--")
         ax.plot(df["DATE"], df["CURRENT_WEIGHT"], label="Current Weight", marker="o")
@@ -126,8 +133,7 @@ elif menu == "➕ Add Entry":
         mood = st.text_input("Mood/Journal")
         comments = st.text_area("Comments")
 
-        submitted = st.form_submit_button("Submit")
-        if submitted:
+        if st.form_submit_button("Submit"):
             add_entry([
                 date.strftime("%Y-%m-%d"),
                 target_weight,
@@ -159,8 +165,7 @@ elif menu == "✏️ Update Entry":
                 sugar = st.text_input("Fasting Sugar", value=row["FASTING_SUGAR"])
                 mood = st.text_input("Mood/Journal", value=row["MOOD_JOURNAL"])
                 comments = st.text_area("Comments", value=row["COMMENTS"])
-                submitted = st.form_submit_button("Update")
-                if submitted:
+                if st.form_submit_button("Update"):
                     success = update_entry(date_to_update, [
                         date_to_update,
                         target_weight,

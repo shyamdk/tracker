@@ -1,3 +1,4 @@
 *.pdf
 *.csv
 help.md
+gspread_service_account.json
