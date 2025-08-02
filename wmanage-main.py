@@ -47,30 +47,50 @@ import gspread
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Auth: Auto-switch between local and cloud
+# ✅ Auth: Auto-switch between Streamlit Cloud and local dev
 def authorize_gspread():
+    
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    
+    creds_dict = st.secrets["gcp_service_account"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    
+    return gspread.authorize(creds)
+    '''
     try:
+        # Cloud: Load from Streamlit secrets
         from google.oauth2.service_account import Credentials
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            scopes=scope
         )
         return gspread.authorize(creds)
     except Exception:
+        # Local: Load from JSON file
         from oauth2client.service_account import ServiceAccountCredentials
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_service_account.json", scope)
+        scope = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            "gspread_service_account.json", scope
+        )
         return gspread.authorize(creds)
-
+    '''
 gc = authorize_gspread()
 
-# Load Google Sheet
+# ✅ Load Google Sheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0"
 sheet = gc.open_by_url(SHEET_URL)
 worksheet = sheet.sheet1
 
-# Data functions
+# ✅ Google Sheet Data Operations
 def get_data():
     records = worksheet.get_all_records()
     return pd.DataFrame(records)
@@ -94,13 +114,15 @@ def delete_entry(date):
             return True
     return False
 
-# UI
+# ✅ UI Layout
 st.set_page_config(page_title="Health Tracker", layout="wide")
 st.title("🧘 Health & Weight Tracker")
+
 menu = st.sidebar.radio("Menu", ["📈 Dashboard", "➕ Add Entry", "✏️ Update Entry", "❌ Delete Entry"])
 
 df = get_data()
 
+# 📈 Dashboard
 if menu == "📈 Dashboard":
     st.subheader("📊 Progress Overview")
     st.dataframe(df)
@@ -119,6 +141,7 @@ if menu == "📈 Dashboard":
     else:
         st.info("No data to display yet.")
 
+# ➕ Add Entry
 elif menu == "➕ Add Entry":
     st.subheader("Add New Entry")
     with st.form("add_entry"):
@@ -148,6 +171,7 @@ elif menu == "➕ Add Entry":
             ])
             st.success("✅ Entry added successfully!")
 
+# ✏️ Update Entry
 elif menu == "✏️ Update Entry":
     st.subheader("Update Existing Entry")
     date_to_update = st.text_input("Enter Date to Update (YYYY-MM-DD)")
@@ -185,6 +209,7 @@ elif menu == "✏️ Update Entry":
         else:
             st.error("❌ No entry found for that date.")
 
+# ❌ Delete Entry
 elif menu == "❌ Delete Entry":
     st.subheader("Delete Entry")
     date_to_delete = st.text_input("Enter Date to Delete (YYYY-MM-DD)")
