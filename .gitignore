@@ -2,3 +2,5 @@
 *.csv
 help.md
 gspread_service_account.json
+.streamlit/secrets.toml
+*.json
