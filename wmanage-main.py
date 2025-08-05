@@ -29,6 +29,7 @@ git push -u origin main
 git branch -M main
 git push -u origin main
 
+----------------
 
 git add .
 git commit -m "Prepare for Streamlit deployment"
@@ -73,15 +74,27 @@ def authorize_gspread():
         return gspread.authorize(creds)
 
 gc = authorize_gspread()
-sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0")
+
+# ------------------ SHEET INIT ------------------
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0"
+sheet = gc.open_by_url(SHEET_URL)
 daily_ws = sheet.sheet1
 
-# Create/Get Task Tracker Sheet
-try:
-    task_ws = sheet.worksheet("Task Tracker")
-except:
-    task_ws = sheet.add_worksheet(title="Task Tracker", rows="100", cols="10")
-    task_ws.append_row(["ADD_DATE", "TASK", "TARGET_DATE", "TASK_CATEGORY", "TASK_TYPE", "STATUS", "COMMENTS"])
+# 🛠️ Auto-create Task Tracker sheet if not present
+def get_or_create_task_sheet(sheet):
+    expected_headers = ["ADD_DATE", "TASK", "TARGET_DATE", "TASK_CATEGORY", "TASK_TYPE", "STATUS", "COMMENTS"]
+    try:
+        task_ws = sheet.worksheet("Task Tracker")
+        headers = task_ws.row_values(1)
+        if headers != expected_headers:
+            task_ws.clear()
+            task_ws.append_row(expected_headers)
+    except:
+        task_ws = sheet.add_worksheet(title="Task Tracker", rows="100", cols="10")
+        task_ws.append_row(expected_headers)
+    return task_ws
+
+task_ws = get_or_create_task_sheet(sheet)
 
 # ------------------ DAILY TRACKER UTILS ------------------
 def get_daily_data():
@@ -108,7 +121,8 @@ def delete_daily_entry(date):
 
 # ------------------ TASK TRACKER UTILS ------------------
 def get_task_data():
-    return pd.DataFrame(task_ws.get_all_records())
+    records = task_ws.get_all_records()
+    return pd.DataFrame(records)
 
 def add_task(task_entry):
     task_ws.append_row(task_entry)
@@ -135,6 +149,7 @@ st.title("🧘 Health & Task Tracker")
 
 menu_section = st.sidebar.selectbox("Main Menu", ["📅 Daily Tracker", "📝 Task Tracker"])
 
+# ========== DAILY TRACKER ==========
 if menu_section == "📅 Daily Tracker":
     sub_menu = st.sidebar.radio("Daily Tracker", ["📈 Dashboard", "➕ Add Entry", "✏️ Update Entry", "❌ Delete Entry"])
     df = get_daily_data()
@@ -222,10 +237,14 @@ if menu_section == "📅 Daily Tracker":
         if st.button("Delete Entry"):
             st.success("✅ Entry deleted.") if delete_daily_entry(date_to_delete) else st.error("❌ Entry not found.")
 
-# ------------------ TASK TRACKER UI ------------------
+# ========== TASK TRACKER ==========
 elif menu_section == "📝 Task Tracker":
     sub_menu = st.sidebar.radio("Task Tracker", ["📋 Dashboard", "➕ Add Task", "✏️ Modify Task", "❌ Delete Task"])
     task_df = get_task_data()
+
+    if "STATUS" not in task_df.columns:
+        st.warning("⚠️ Task Tracker sheet is missing expected 'STATUS' column. Please check or reinitialize the sheet.")
+        st.stop()
 
     if sub_menu == "📋 Dashboard":
         st.subheader("🧮 Task Dashboard")
