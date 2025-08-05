@@ -1,6 +1,18 @@
 
 '''
-cd path/to/tracker-clean
+cd /Users/shyamdk/developer/aone/trading/tracker/tracker-clean
+
+If clone is required...
+
+git clone https://github.com/shyamdk/tracker.git
+
+
+git pull origin main
+
+
+
+
+
 git init
 
 echo -e "*.pdf\n*.csv\nhelp.md" > .gitignore
@@ -41,7 +53,6 @@ nano .streamlit/secrets.toml
 rm .streamlit/secrets.toml
 '''
 
-
 import streamlit as st
 import gspread
 import pandas as pd
@@ -49,172 +60,221 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ✅ Auth: Auto-switch between Streamlit Cloud and local dev
+# ------------------ AUTH ------------------
 def authorize_gspread():
-    
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
-    creds_dict = st.secrets["gcp_service_account"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    
-    return gspread.authorize(creds)
-    '''
     try:
-        # Cloud: Load from Streamlit secrets
-        from google.oauth2.service_account import Credentials
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
-            scopes=scope
-        )
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gcp_service_account"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         return gspread.authorize(creds)
     except Exception:
-        # Local: Load from JSON file
-        from oauth2client.service_account import ServiceAccountCredentials
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            "gspread_service_account.json", scope
-        )
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_service_account.json", scope)
         return gspread.authorize(creds)
-    '''
+
 gc = authorize_gspread()
+sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0")
+daily_ws = sheet.sheet1
 
-# ✅ Load Google Sheet
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1ah_-_4cDJx-jKgBbSKBroyesnInBPxi0ow-dssnFVRg/edit#gid=0"
-sheet = gc.open_by_url(SHEET_URL)
-worksheet = sheet.sheet1
+# Create/Get Task Tracker Sheet
+try:
+    task_ws = sheet.worksheet("Task Tracker")
+except:
+    task_ws = sheet.add_worksheet(title="Task Tracker", rows="100", cols="10")
+    task_ws.append_row(["ADD_DATE", "TASK", "TARGET_DATE", "TASK_CATEGORY", "TASK_TYPE", "STATUS", "COMMENTS"])
 
-# ✅ Google Sheet Data Operations
-def get_data():
-    records = worksheet.get_all_records()
-    return pd.DataFrame(records)
+# ------------------ DAILY TRACKER UTILS ------------------
+def get_daily_data():
+    return pd.DataFrame(daily_ws.get_all_records())
 
-def add_entry(entry):
-    worksheet.append_row(entry)
+def add_daily_entry(entry):
+    daily_ws.append_row(entry)
 
-def update_entry(date, updated_entry):
-    data = worksheet.get_all_values()
-    for i, row in enumerate(data[1:], start=2):  # Skip header
-        if row[0] == date:
-            worksheet.update(f'A{i}:J{i}', [updated_entry])
-            return True
-    return False
-
-def delete_entry(date):
-    data = worksheet.get_all_values()
+def update_daily_entry(date, updated_entry):
+    data = daily_ws.get_all_values()
     for i, row in enumerate(data[1:], start=2):
         if row[0] == date:
-            worksheet.delete_rows(i)
+            daily_ws.update(f'A{i}:J{i}', [updated_entry])
             return True
     return False
 
-# ✅ UI Layout
-st.set_page_config(page_title="Health Tracker", layout="wide")
-st.title("🧘 Health & Weight Tracker")
+def delete_daily_entry(date):
+    data = daily_ws.get_all_values()
+    for i, row in enumerate(data[1:], start=2):
+        if row[0] == date:
+            daily_ws.delete_rows(i)
+            return True
+    return False
 
-menu = st.sidebar.radio("Menu", ["📈 Dashboard", "➕ Add Entry", "✏️ Update Entry", "❌ Delete Entry"])
+# ------------------ TASK TRACKER UTILS ------------------
+def get_task_data():
+    return pd.DataFrame(task_ws.get_all_records())
 
-df = get_data()
+def add_task(task_entry):
+    task_ws.append_row(task_entry)
 
-# 📈 Dashboard
-if menu == "📈 Dashboard":
-    st.subheader("📊 Progress Overview")
-    st.dataframe(df)
+def modify_task(add_date, updated_task):
+    data = task_ws.get_all_values()
+    for i, row in enumerate(data[1:], start=2):
+        if row[0] == add_date:
+            task_ws.update(f'A{i}:G{i}', [updated_task])
+            return True
+    return False
 
-    if not df.empty:
-        df["DATE"] = pd.to_datetime(df["DATE"])
-        df = df.sort_values("DATE")
-        fig, ax = plt.subplots()
-        ax.plot(df["DATE"], df["TARGET_WEIGHT"], label="Target Weight", linestyle="--")
-        ax.plot(df["DATE"], df["CURRENT_WEIGHT"], label="Current Weight", marker="o")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Weight (kg)")
-        ax.set_title("Progress vs Target")
-        ax.legend()
-        st.pyplot(fig)
-    else:
-        st.info("No data to display yet.")
+def delete_task(add_date):
+    data = task_ws.get_all_values()
+    for i, row in enumerate(data[1:], start=2):
+        if row[0] == add_date:
+            task_ws.delete_rows(i)
+            return True
+    return False
 
-# ➕ Add Entry
-elif menu == "➕ Add Entry":
-    st.subheader("Add New Entry")
-    with st.form("add_entry"):
-        date = st.date_input("Date", value=datetime.today())
-        target_weight = st.number_input("Target Weight", min_value=30.0, max_value=200.0)
-        current_weight = st.number_input("Current Weight", min_value=30.0, max_value=200.0)
-        steps = st.number_input("Steps Walked", min_value=0)
-        yoga = st.checkbox("Yoga Done?")
-        breathing = st.checkbox("Breathing Done?")
-        bp = st.text_input("Blood Pressure", value="120/80")
-        sugar = st.text_input("Fasting Sugar", value="95")
-        mood = st.text_input("Mood/Journal")
-        comments = st.text_area("Comments")
+# ------------------ UI ------------------
+st.set_page_config(page_title="Health & Task Tracker", layout="wide")
+st.title("🧘 Health & Task Tracker")
 
-        if st.form_submit_button("Submit"):
-            add_entry([
-                date.strftime("%Y-%m-%d"),
-                target_weight,
-                current_weight,
-                steps,
-                "Yes" if yoga else "No",
-                "Yes" if breathing else "No",
-                bp,
-                sugar,
-                mood,
-                comments
-            ])
-            st.success("✅ Entry added successfully!")
+menu_section = st.sidebar.selectbox("Main Menu", ["📅 Daily Tracker", "📝 Task Tracker"])
 
-# ✏️ Update Entry
-elif menu == "✏️ Update Entry":
-    st.subheader("Update Existing Entry")
-    date_to_update = st.text_input("Enter Date to Update (YYYY-MM-DD)")
-    if st.button("Load Entry"):
-        row = df[df["DATE"] == date_to_update]
-        if not row.empty:
-            row = row.iloc[0]
-            with st.form("update_entry"):
-                target_weight = st.number_input("Target Weight", value=float(row["TARGET_WEIGHT"]))
-                current_weight = st.number_input("Current Weight", value=float(row["CURRENT_WEIGHT"]))
-                steps = st.number_input("Steps Walked", value=int(row["STEPS"]))
-                yoga = st.checkbox("Yoga Done?", value=row["YOGA"] == "Yes")
-                breathing = st.checkbox("Breathing Done?", value=row["BREATHING"] == "Yes")
-                bp = st.text_input("Blood Pressure", value=row["BLOOD_PRESSURE"])
-                sugar = st.text_input("Fasting Sugar", value=row["FASTING_SUGAR"])
-                mood = st.text_input("Mood/Journal", value=row["MOOD_JOURNAL"])
-                comments = st.text_area("Comments", value=row["COMMENTS"])
-                if st.form_submit_button("Update"):
-                    success = update_entry(date_to_update, [
-                        date_to_update,
-                        target_weight,
-                        current_weight,
-                        steps,
-                        "Yes" if yoga else "No",
-                        "Yes" if breathing else "No",
-                        bp,
-                        sugar,
-                        mood,
-                        comments
-                    ])
-                    if success:
-                        st.success("✅ Entry updated.")
-                    else:
-                        st.error("❌ Entry not found.")
+if menu_section == "📅 Daily Tracker":
+    sub_menu = st.sidebar.radio("Daily Tracker", ["📈 Dashboard", "➕ Add Entry", "✏️ Update Entry", "❌ Delete Entry"])
+    df = get_daily_data()
+
+    if sub_menu == "📈 Dashboard":
+        st.subheader("📊 Progress Overview")
+        st.dataframe(df)
+        if not df.empty:
+            df["DATE"] = pd.to_datetime(df["DATE"])
+            df = df.sort_values("DATE")
+            fig, ax = plt.subplots()
+            ax.plot(df["DATE"], df["TARGET_WEIGHT"], label="Target Weight", linestyle="--")
+            ax.plot(df["DATE"], df["CURRENT_WEIGHT"], label="Current Weight", marker="o")
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Weight (kg)")
+            ax.set_title("Progress vs Target")
+            ax.legend()
+            st.pyplot(fig)
         else:
-            st.error("❌ No entry found for that date.")
+            st.info("No data to display yet.")
 
-# ❌ Delete Entry
-elif menu == "❌ Delete Entry":
-    st.subheader("Delete Entry")
-    date_to_delete = st.text_input("Enter Date to Delete (YYYY-MM-DD)")
-    if st.button("Delete Entry"):
-        if delete_entry(date_to_delete):
-            st.success("✅ Entry deleted.")
+    elif sub_menu == "➕ Add Entry":
+        st.subheader("Add New Entry")
+        with st.form("add_entry"):
+            date = st.date_input("Date", value=datetime.today())
+            target_weight = st.number_input("Target Weight", min_value=30.0, max_value=200.0)
+            current_weight = st.number_input("Current Weight", min_value=30.0, max_value=200.0)
+            steps = st.number_input("Steps Walked", min_value=0)
+            yoga = st.checkbox("Yoga Done?")
+            breathing = st.checkbox("Breathing Done?")
+            bp = st.text_input("Blood Pressure", value="120/80")
+            sugar = st.text_input("Fasting Sugar", value="95")
+            mood = st.text_input("Mood/Journal")
+            comments = st.text_area("Comments")
+            if st.form_submit_button("Submit"):
+                add_daily_entry([
+                    date.strftime("%Y-%m-%d"),
+                    target_weight,
+                    current_weight,
+                    steps,
+                    "Yes" if yoga else "No",
+                    "Yes" if breathing else "No",
+                    bp,
+                    sugar,
+                    mood,
+                    comments
+                ])
+                st.success("✅ Entry added successfully!")
+
+    elif sub_menu == "✏️ Update Entry":
+        st.subheader("Update Existing Entry")
+        date_to_update = st.text_input("Enter Date to Update (YYYY-MM-DD)")
+        if st.button("Load Entry"):
+            row = df[df["DATE"] == date_to_update]
+            if not row.empty:
+                row = row.iloc[0]
+                with st.form("update_entry"):
+                    target_weight = st.number_input("Target Weight", value=float(row["TARGET_WEIGHT"]))
+                    current_weight = st.number_input("Current Weight", value=float(row["CURRENT_WEIGHT"]))
+                    steps = st.number_input("Steps Walked", value=int(row["STEPS"]))
+                    yoga = st.checkbox("Yoga Done?", value=row["YOGA"] == "Yes")
+                    breathing = st.checkbox("Breathing Done?", value=row["BREATHING"] == "Yes")
+                    bp = st.text_input("Blood Pressure", value=row["BLOOD_PRESSURE"])
+                    sugar = st.text_input("Fasting Sugar", value=row["FASTING_SUGAR"])
+                    mood = st.text_input("Mood/Journal", value=row["MOOD_JOURNAL"])
+                    comments = st.text_area("Comments", value=row["COMMENTS"])
+                    if st.form_submit_button("Update"):
+                        success = update_daily_entry(date_to_update, [
+                            date_to_update,
+                            target_weight,
+                            current_weight,
+                            steps,
+                            "Yes" if yoga else "No",
+                            "Yes" if breathing else "No",
+                            bp,
+                            sugar,
+                            mood,
+                            comments
+                        ])
+                        st.success("✅ Entry updated." if success else "❌ Entry not found.")
+
+    elif sub_menu == "❌ Delete Entry":
+        st.subheader("Delete Entry")
+        date_to_delete = st.text_input("Enter Date to Delete (YYYY-MM-DD)")
+        if st.button("Delete Entry"):
+            st.success("✅ Entry deleted.") if delete_daily_entry(date_to_delete) else st.error("❌ Entry not found.")
+
+# ------------------ TASK TRACKER UI ------------------
+elif menu_section == "📝 Task Tracker":
+    sub_menu = st.sidebar.radio("Task Tracker", ["📋 Dashboard", "➕ Add Task", "✏️ Modify Task", "❌ Delete Task"])
+    task_df = get_task_data()
+
+    if sub_menu == "📋 Dashboard":
+        st.subheader("🧮 Task Dashboard")
+        filtered_df = task_df[task_df["STATUS"].isin(["Pending", "In Progress"])]
+        if filtered_df.empty:
+            st.info("No pending or in-progress tasks.")
         else:
-            st.error("❌ Entry not found.")
+            grouped = filtered_df.groupby("TASK_CATEGORY")
+            for cat, group in grouped:
+                st.markdown(f"### 📂 {cat}")
+                sorted_group = group.sort_values(by="TASK_TYPE", ascending=True)
+                st.dataframe(sorted_group)
+
+    elif sub_menu == "➕ Add Task":
+        st.subheader("Add New Task")
+        with st.form("add_task"):
+            add_date = datetime.today().strftime("%Y-%m-%d")
+            task = st.text_input("Task")
+            target_date = st.date_input("Target Date")
+            category = st.text_input("Task Category")
+            task_type = st.selectbox("Task Type", ["Important and Urgent", "Important", "Urgent", "Optional"])
+            status = st.selectbox("Status", ["Pending", "In Progress", "Done"])
+            comments = st.text_area("Comments")
+            if st.form_submit_button("Add Task"):
+                add_task([add_date, task, target_date.strftime("%Y-%m-%d"), category, task_type, status, comments])
+                st.success("✅ Task added.")
+
+    elif sub_menu == "✏️ Modify Task":
+        st.subheader("Modify Existing Task")
+        add_date = st.text_input("Enter ADD_DATE of Task to Modify (YYYY-MM-DD)")
+        task_row = task_df[task_df["ADD_DATE"] == add_date]
+        if st.button("Load Task"):
+            if not task_row.empty:
+                task_row = task_row.iloc[0]
+                with st.form("modify_task"):
+                    task = st.text_input("Task", value=task_row["TASK"])
+                    target_date = st.date_input("Target Date", value=pd.to_datetime(task_row["TARGET_DATE"]))
+                    category = st.text_input("Category", value=task_row["TASK_CATEGORY"])
+                    task_type = st.selectbox("Task Type", ["Important and Urgent", "Important", "Urgent", "Optional"], index=0)
+                    status = st.selectbox("Status", ["Pending", "In Progress", "Done"], index=0)
+                    comments = st.text_area("Comments", value=task_row["COMMENTS"])
+                    if st.form_submit_button("Update Task"):
+                        updated = modify_task(add_date, [add_date, task, target_date.strftime("%Y-%m-%d"), category, task_type, status, comments])
+                        st.success("✅ Task updated." if updated else "❌ Task not found.")
+            else:
+                st.error("❌ No task found.")
+
+    elif sub_menu == "❌ Delete Task":
+        st.subheader("Delete Task")
+        add_date = st.text_input("Enter ADD_DATE of Task to Delete (YYYY-MM-DD)")
+        if st.button("Delete Task"):
+            st.success("✅ Task deleted.") if delete_task(add_date) else st.error("❌ Task not found.")
